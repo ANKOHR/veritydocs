@@ -1,0 +1,11 @@
+{
+  "name": "veritydocs",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev": "pnpm --filter veritydocs-web dev",
+    "build": "pnpm --filter veritydocs-web build",
+    "lint": "pnpm --filter veritydocs-web lint",
+    "typecheck": "pnpm --filter veritydocs-web typecheck"
+  }
+}

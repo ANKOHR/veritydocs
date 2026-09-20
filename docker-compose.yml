@@ -1,0 +1,63 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: veritydocs
+      POSTGRES_USER: veritydocs
+      POSTGRES_PASSWORD: veritydocs
+    volumes:
+      - veritydocs-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U veritydocs -d veritydocs"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  api:
+    build: .
+    environment:
+      APP_ENV: docker
+      DATABASE_URL: postgresql+psycopg://veritydocs:veritydocs@postgres:5432/veritydocs
+      STORAGE_ROOT: /app/storage
+      REDIS_URL: redis://redis:6379/0
+      EXTRACTION_PROVIDER: demo
+      OCR_ENGINE: tesseract
+    volumes:
+      - veritydocs-storage:/app/storage
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build: .
+    command: ["dramatiq", "veritydocs_api.jobs", "--processes", "1", "--threads", "4"]
+    environment:
+      APP_ENV: docker
+      DATABASE_URL: postgresql+psycopg://veritydocs:veritydocs@postgres:5432/veritydocs
+      STORAGE_ROOT: /app/storage
+      REDIS_URL: redis://redis:6379/0
+      EXTRACTION_PROVIDER: demo
+      OCR_ENGINE: tesseract
+    volumes:
+      - veritydocs-storage:/app/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  veritydocs-postgres:
+  veritydocs-storage:

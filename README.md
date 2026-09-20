@@ -1,0 +1,114 @@
+# VerityDocs
+
+Evidence-backed document intelligence for turning messy PDFs, scans and spreadsheets into
+structured, validated and reviewable records.
+
+> Local build status: the deterministic showcase path is verified. No live provider key, real
+> customer document, production deployment or real-world accuracy claim is included.
+
+VerityDocs is intentionally not a document chatbot. Its central object is a document pipeline:
+
+```text
+immutable upload
+  -> PDF/image/spreadsheet normalization
+  -> OCR and layout representation
+  -> typed extraction
+  -> field-level provenance
+  -> deterministic validation
+  -> cross-document reconciliation
+  -> composite confidence
+  -> human review or VERIFIED output
+```
+
+The first showcase case is **Acme Property Acquisition**. It combines a rent roll, operating
+statement, loan summary and property-tax record. The case view exposes reconciled financial facts,
+exceptions and source evidence for every important field.
+
+## What is implemented
+
+- FastAPI + SQLAlchemy relational data model with tenant-scoped cases, immutable document hashes,
+  processing runs, artifacts, fields, evidence, validations, reconciliations, reviews and audit
+  events.
+- PDF native-text extraction and page rendering; XLSX/CSV table normalization with title rows,
+  merged-cell-friendly offsets and totals-row handling; image normalization.
+- Tesseract OCR adapter with a fail-closed unavailable-engine boundary.
+- Credential-free deterministic fixture provider plus a structured OpenAI multimodal adapter that
+  is never instantiated without an explicit key.
+- Source-level field provenance, deterministic finance rules, cross-document reconciliation,
+  composite confidence, human review and `UNABLE_TO_VERIFY` outcomes.
+- Invoice extraction with VAT arithmetic and a contract/payment-application comparison path that
+  surfaces a claimed amount above the agreement value as a conflict.
+- Next.js evidence-first case workspace and a Docker Compose topology for API, worker, PostgreSQL
+  and Redis.
+- 9 backend tests, a 100-case synthetic evaluation runner, Alembic initial migration and honest
+  evidence documentation.
+
+## Current implementation boundary
+
+- Native PDF text extraction uses PyMuPDF.
+- XLSX and CSV normalization handles title rows, merged cells, header offsets and totals rows.
+- Scanned-page OCR uses a real Tesseract adapter when the binary is available; unavailable OCR
+  fails closed and routes the document toward review.
+- `DemoExtractionProvider` makes the fixture case reproducible without credentials.
+- `OpenAIMultimodalProvider` is implemented as a structured-output adapter but is not called unless
+  `EXTRACTION_PROVIDER=openai` and a separately configured key are present.
+- Every persisted field carries confidence, method, validation state and evidence references.
+- Arithmetic and reconciliation rules are deterministic Python, never model-generated math.
+
+No live model, customer result or production accuracy claim is made by the local fixture metrics.
+
+## Run locally
+
+```powershell
+cd C:\Users\henry\veritydocs
+py -3.13 -m venv .venv
+.venv\Scripts\python.exe -m pip install -e ".[dev]"
+.venv\Scripts\python.exe -m uvicorn veritydocs_api.main:app --app-dir apps/api --reload
+```
+
+In another terminal:
+
+```powershell
+cd C:\Users\henry\veritydocs
+pnpm install
+pnpm --filter veritydocs-web dev
+```
+
+Open `http://localhost:3000`, load the seeded Acme case, and inspect the evidence-backed case
+view. Run the backend checks with:
+
+```powershell
+.venv\Scripts\python.exe -m pytest -q
+.venv\Scripts\python.exe packages\evals\run_evals.py
+```
+
+To exercise the production-shaped local topology once Docker is available:
+
+```powershell
+docker compose up --build
+```
+
+The API is then at `http://localhost:8000`, the OpenAPI document is at `/docs`, and the worker
+consumes `run_pipeline=false` uploads through Redis/Dramatiq. The default Compose provider remains
+the deterministic fixture provider.
+
+## API entry points
+
+```text
+GET  /health
+POST /api/cases
+GET  /api/cases
+GET  /api/cases/{case_id}
+POST /api/cases/{case_id}/demo-seed
+POST /api/cases/{case_id}/contract-seed
+POST /api/cases/{case_id}/documents
+GET  /api/documents/{document_id}/pages/{page_number}
+GET  /api/review
+POST /api/review/{review_id}/resolve
+```
+
+The `X-Tenant-ID` header selects the local tenant boundary; the default development tenant is
+`demo-tenant`. Formal authentication is a production follow-up, not a claim of this local build.
+
+See [`docs/architecture.md`](docs/architecture.md) and [`docs/evidence.md`](docs/evidence.md) for
+the design and current claim boundary.

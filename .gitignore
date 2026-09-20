@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.next/
+node_modules/
+storage/
+*-storage*/
+*.db
+*.egg-info/
+*.tsbuildinfo
+.env
+.env.local
+dist/
+build/
