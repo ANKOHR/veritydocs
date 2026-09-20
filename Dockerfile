@@ -17,4 +17,4 @@ COPY alembic.ini ./
 RUN pip install --upgrade pip && pip install .
 
 EXPOSE 8000
-CMD ["uvicorn", "veritydocs_api.main:app", "--app-dir", "apps/api", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "if [ \"$SERVICE_ROLE\" = \"worker\" ]; then exec dramatiq veritydocs_api.jobs --processes 1 --threads 4; else exec uvicorn veritydocs_api.main:app --app-dir apps/api --host 0.0.0.0 --port ${PORT:-8000}; fi"]
