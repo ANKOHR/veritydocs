@@ -162,7 +162,7 @@ def test_numeric_evidence_needles_prioritize_the_value():
             )
         ],
     )
-    evidence = _find_evidence(document, "gross", Decimal("9600"))
+    evidence = _find_evidence(document, "gross", Decimal(9600))
     assert evidence and evidence["text"] == "9,600.00"
 
 

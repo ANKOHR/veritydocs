@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import mimetypes
 import logging
+import mimetypes
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -38,7 +38,6 @@ from .schemas import CaseView, ReviewDecision
 from .seed import seed_acme_case, seed_contract_case
 from .service import case_view, object_store, process_document
 from .storage import sha256_bytes
-
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
