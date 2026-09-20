@@ -11,8 +11,8 @@ from sqlalchemy.orm import Session
 
 from .config import Settings, get_settings
 from .models import CaseModel, DocumentModel
-from .service import process_document
-from .storage import LocalObjectStore, sha256_bytes
+from .service import object_store, process_document
+from .storage import sha256_bytes
 
 
 def _pdf(title: str, lines: list[str]) -> bytes:
@@ -159,7 +159,7 @@ def seed_acme_case(
     settings: Settings | None = None,
 ) -> CaseModel:
     settings = settings or get_settings()
-    store = LocalObjectStore(settings.storage_root)
+    store = object_store(settings)
     case = db.get(CaseModel, case_id) if case_id else None
     if case is None:
         case = CaseModel(
@@ -210,7 +210,7 @@ def seed_contract_case(
     settings: Settings | None = None,
 ) -> CaseModel:
     settings = settings or get_settings()
-    store = LocalObjectStore(settings.storage_root)
+    store = object_store(settings)
     case = db.get(CaseModel, case_id) if case_id else None
     if case is None:
         case = CaseModel(

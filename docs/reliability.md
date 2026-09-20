@@ -13,5 +13,6 @@ The pipeline is designed to fail visibly:
   implementation without mutating the source.
 
 The current implementation does not yet claim a production dead-letter dashboard, distributed
-tracing, malware scanning or cloud object-storage durability. Those are the next reliability steps
-after a real deployment target is authorized.
+tracing or malware scanning. Cloud object-storage support is implemented through the
+S3-compatible adapter, but deployment evidence remains separate from local verification until the
+Railway API and worker complete a real upload.

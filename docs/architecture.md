@@ -41,9 +41,10 @@ FastAPI API ---- PostgreSQL metadata/facts
 ## Storage boundary
 
 PostgreSQL stores normalized metadata, typed values, review decisions, rule outcomes and audit
-events. `LocalObjectStore` is the local implementation of the object-storage interface; a future
-S3-compatible implementation can replace it without changing the pipeline contract. Derived
-artifacts are separate from originals:
+events. `LocalObjectStore` is used for local development and tests; `S3ObjectStore` is the
+deployed S3-compatible implementation for the Railway bucket. API and worker use the same object
+keys, so rendered pages and JSON artifacts survive web-process boundaries. Derived artifacts are
+separate from originals:
 
 ```text
 documents/{document_id}/original/<filename>

@@ -1,4 +1,4 @@
-# VerityDocs
+# VerityDocs: Evidence-backed document intelligence and reconciliation
 
 Evidence-backed document intelligence for turning messy PDFs, scans and spreadsheets into
 structured, validated and reviewable records.
@@ -31,16 +31,17 @@ exceptions and source evidence for every important field.
   events.
 - PDF native-text extraction and page rendering; XLSX/CSV table normalization with title rows,
   merged-cell-friendly offsets and totals-row handling; image normalization.
-- Tesseract OCR adapter with a fail-closed unavailable-engine boundary.
+- Tesseract OCR adapter with a fail-closed unavailable-engine boundary and two public synthetic
+  scanned-invoice fixtures.
 - Credential-free deterministic fixture provider plus a structured OpenAI multimodal adapter that
   is never instantiated without an explicit key.
 - Source-level field provenance, deterministic finance rules, cross-document reconciliation,
   composite confidence, human review and `UNABLE_TO_VERIFY` outcomes.
 - Invoice extraction with VAT arithmetic and a contract/payment-application comparison path that
   surfaces a claimed amount above the agreement value as a conflict.
-- Next.js evidence-first case workspace and a Docker Compose topology for API, worker, PostgreSQL
-  and Redis.
-- 9 backend tests, a 100-case synthetic evaluation runner, Alembic initial migration and honest
+- Next.js evidence-first case workspace with source-region highlighting and a Docker Compose
+  topology for API, worker, PostgreSQL and Redis.
+- 48 targeted backend tests, a 100-case synthetic evaluation runner, Alembic initial migration and honest
   evidence documentation.
 
 ## Current implementation boundary
@@ -52,6 +53,8 @@ exceptions and source evidence for every important field.
 - `DemoExtractionProvider` makes the fixture case reproducible without credentials.
 - `OpenAIMultimodalProvider` is implemented as a structured-output adapter but is not called unless
   `EXTRACTION_PROVIDER=openai` and a separately configured key are present.
+- `S3ObjectStore` is implemented for Railway's S3-compatible bucket; local development defaults to
+  `LocalObjectStore`.
 - Every persisted field carries confidence, method, validation state and evidence references.
 - Arithmetic and reconciliation rules are deterministic Python, never model-generated math.
 
@@ -75,7 +78,8 @@ pnpm --filter veritydocs-web dev
 ```
 
 Open `http://localhost:3000`, load the seeded Acme case, and inspect the evidence-backed case
-view. Run the backend checks with:
+view. The case workspace also accepts a synthetic scanned invoice upload and polls the worker
+until OCR, deterministic extraction and validation complete. Run the backend checks with:
 
 ```powershell
 .venv\Scripts\python.exe -m pytest -q
@@ -103,6 +107,8 @@ POST /api/cases/{case_id}/demo-seed
 POST /api/cases/{case_id}/contract-seed
 POST /api/cases/{case_id}/documents
 GET  /api/documents/{document_id}/pages/{page_number}
+GET  /api/documents/{document_id}/processing
+GET  /api/documents/{document_id}/artifacts/{kind}
 GET  /api/review
 POST /api/review/{review_id}/resolve
 ```

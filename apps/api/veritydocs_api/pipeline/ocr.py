@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import io
+import logging
 import shutil
+import subprocess
 from typing import Any
 
 from PIL import Image
@@ -11,6 +13,9 @@ from .types import NormalizedPage, TextBlock
 
 class OCRUnavailable(RuntimeError):
     pass
+
+
+logger = logging.getLogger(__name__)
 
 
 class TesseractOCREngine:
@@ -24,6 +29,14 @@ class TesseractOCREngine:
         import pytesseract
 
         self._pytesseract = pytesseract
+        try:
+            result = subprocess.run(
+                ["tesseract", "--version"], capture_output=True, text=True, check=False
+            )
+            self.version = (result.stdout or result.stderr).splitlines()[0].strip()
+        except OSError:
+            self.version = "unknown"
+        logger.info("ocr_engine=%s version=%s", self.name, self.version)
 
     def image_to_blocks(self, data: bytes) -> tuple[list[TextBlock], float]:
         image = Image.open(io.BytesIO(data))
@@ -50,6 +63,7 @@ class TesseractOCREngine:
                         result["left"][index] + result["width"][index],
                         result["top"][index] + result["height"][index],
                     ],
+                    kind="ocr_token",
                     confidence=confidence,
                 )
             )

@@ -17,14 +17,22 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .config import get_settings
 from .database import get_db, init_db
-from .models import AuditEventModel, CaseModel, DocumentModel, ExtractedFieldModel, ReviewItemModel
+from .models import (
+    ArtifactModel,
+    AuditEventModel,
+    CaseModel,
+    DocumentModel,
+    ExtractedFieldModel,
+    ProcessingRunModel,
+    ReviewItemModel,
+)
 from .schemas import CaseView, ReviewDecision
 from .seed import seed_acme_case, seed_contract_case
 from .service import case_view, object_store, process_document
@@ -264,12 +272,17 @@ def document_content(
     document_id: str,
     db: Session = Depends(get_db),
     tenant_id: Annotated[str | None, Header(alias="X-Tenant-ID")] = None,
-) -> FileResponse:
+) -> Response:
     document = _owned_document(db, document_id, _tenant(tenant_id))
-    path = Path(get_settings().storage_root) / document.storage_key
-    if not path.is_file():
+    try:
+        data = object_store().get_bytes(document.storage_key)
+    except (OSError, KeyError, RuntimeError):
         raise HTTPException(status_code=404, detail="Source artifact not found")
-    return FileResponse(path, media_type=document.mime_type, filename=document.filename)
+    return Response(
+        content=data,
+        media_type=document.mime_type,
+        headers={"Content-Disposition": f'inline; filename="{document.filename}"'},
+    )
 
 
 @app.get("/api/documents/{document_id}/pages/{page_number}")
@@ -278,17 +291,103 @@ def document_page(
     page_number: int,
     db: Session = Depends(get_db),
     tenant_id: Annotated[str | None, Header(alias="X-Tenant-ID")] = None,
-) -> FileResponse:
+) -> Response:
     document = _owned_document(db, document_id, _tenant(tenant_id))
     if page_number < 1:
         raise HTTPException(status_code=400, detail="Page number must be positive")
     key = f"documents/{document.id}/rendered/page-{page_number:03d}.png"
-    path = Path(get_settings().storage_root) / key
-    if not path.is_file():
+    try:
+        data = object_store().get_bytes(key)
+    except (OSError, KeyError, RuntimeError):
         raise HTTPException(status_code=404, detail="Rendered page artifact not found")
-    return FileResponse(
-        path, media_type="image/png", filename=f"{document.filename}-page-{page_number}.png"
+    return Response(
+        content=data,
+        media_type="image/png",
+        headers={
+            "Content-Disposition": (
+                f'inline; filename="{document.filename}-page-{page_number}.png"'
+            )
+        },
     )
+
+
+@app.get("/api/documents/{document_id}/processing")
+def document_processing(
+    document_id: str,
+    db: Session = Depends(get_db),
+    tenant_id: Annotated[str | None, Header(alias="X-Tenant-ID")] = None,
+) -> dict[str, object]:
+    document = _owned_document(db, document_id, _tenant(tenant_id))
+    runs = list(
+        db.scalars(
+            select(ProcessingRunModel)
+            .where(ProcessingRunModel.document_id == document.id)
+            .order_by(ProcessingRunModel.created_at.asc())
+        )
+    )
+    artifacts = list(
+        db.scalars(select(ArtifactModel).where(ArtifactModel.document_id == document.id))
+    )
+    audit = list(
+        db.scalars(
+            select(AuditEventModel)
+            .where(AuditEventModel.entity_id == document.id)
+            .order_by(AuditEventModel.created_at.asc())
+        )
+    )
+    return {
+        "document_id": document.id,
+        "status": document.status,
+        "document_type": document.document_type,
+        "runs": [
+            {
+                "id": run.id,
+                "status": run.status,
+                "current_stage": run.current_stage,
+                "pipeline_version": run.pipeline_version,
+                "provider": run.provider,
+                "model": run.model,
+                "timings": run.timings_json,
+                "error": run.error,
+            }
+            for run in runs
+        ],
+        "artifacts": [
+            {"kind": artifact.kind, "storage_key": artifact.storage_key, "sha256": artifact.sha256}
+            for artifact in artifacts
+        ],
+        "audit_events": [
+            {
+                "event_type": event.event_type,
+                "entity_type": event.entity_type,
+                "created_at": event.created_at.isoformat(),
+                "payload": event.payload_json,
+            }
+            for event in audit
+        ],
+    }
+
+
+@app.get("/api/documents/{document_id}/artifacts/{kind}")
+def document_artifact(
+    document_id: str,
+    kind: str,
+    db: Session = Depends(get_db),
+    tenant_id: Annotated[str | None, Header(alias="X-Tenant-ID")] = None,
+) -> Response:
+    document = _owned_document(db, document_id, _tenant(tenant_id))
+    artifact = db.scalar(
+        select(ArtifactModel).where(
+            ArtifactModel.document_id == document.id, ArtifactModel.kind == kind
+        )
+    )
+    if artifact is None:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+    try:
+        payload = object_store().get_bytes(artifact.storage_key)
+    except (OSError, KeyError, RuntimeError):
+        raise HTTPException(status_code=404, detail="Artifact content not found")
+    return Response(content=payload, media_type="application/json")
 
 
 @app.get("/api/review", response_model=list[dict[str, object]])

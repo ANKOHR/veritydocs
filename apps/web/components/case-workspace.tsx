@@ -5,7 +5,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { API_URL, apiFetch } from "../lib/api";
+import { API_URL, apiFetch, apiUpload } from "../lib/api";
 import { Shell } from "./shell";
 
 type Evidence = { document_id: string; page: number; text: string; bbox: number[] | null; section: string | null; artifact_key: string | null };
@@ -18,6 +18,8 @@ export function CaseWorkspace({ caseId }: { caseId: string }) {
   const [selected, setSelected] = useState<{ field: Field; document: Document } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [uploadBusy, setUploadBusy] = useState(false);
+  const [uploadMessage, setUploadMessage] = useState<string | null>(null);
   async function load() { try { setData(await apiFetch<CaseData>(`/api/cases/${caseId}`)); } catch (err) { setError(err instanceof Error ? err.message : "Could not load case"); } }
   useEffect(() => {
     let active = true;
@@ -27,12 +29,33 @@ export function CaseWorkspace({ caseId }: { caseId: string }) {
     return () => { active = false; };
   }, [caseId]);
   async function seed() { setBusy(true); try { await apiFetch(`/api/cases/${caseId}/demo-seed`, { method: "POST" }); await load(); } catch (err) { setError(err instanceof Error ? err.message : "Could not seed case"); } finally { setBusy(false); } }
+  async function upload(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setUploadBusy(true); setUploadMessage(`Uploading ${file.name}…`); setError(null);
+    try {
+      const queued = await apiUpload<{ document_id: string }>(
+        `/api/cases/${caseId}/documents?run_pipeline=false`, file,
+      );
+      setUploadMessage("Queued for OCR and validation…");
+      for (let attempt = 0; attempt < 30; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+        const latest = await apiFetch<CaseData>(`/api/cases/${caseId}`);
+        setData(latest);
+        const document = latest.documents.find((item) => item.id === queued.document_id);
+        if (document?.status === "complete") { setUploadMessage("OCR and evidence processing complete."); break; }
+        if (document?.status === "failed") throw new Error("The worker marked this document as failed.");
+      }
+    } catch (err) { setError(err instanceof Error ? err.message : "Could not process upload"); setUploadMessage(null); }
+    finally { setUploadBusy(false); }
+  }
 
   const fields = useMemo(() => data?.documents.flatMap((document) => document.fields.map((field) => ({ field, document }))) || [], [data]);
   if (!data) return <Shell active="Cases"><div className="loading-state">{error || "Loading case…"}<button className="secondary-button" onClick={seed} disabled={busy}>{busy ? "Processing…" : "Seed demo case"}</button></div></Shell>;
   const openReviews = data.reviews.filter((item) => item.status === "open");
   return <Shell active="Cases">
-    <header className="topbar case-topbar"><div><div className="breadcrumb"><Link href="/">Cases</Link><span>/</span>{data.name}</div><h1>{data.name}</h1><p className="lede">{data.property_address || "Property address pending"} <span className="separator">•</span> {data.documents.length} source documents</p></div><div className="header-actions"><span className={`case-status ${data.status}`}>{data.status === "review" ? "Review required" : data.status}</span><button className="secondary-button" onClick={seed} disabled={busy}>{busy ? "Reprocessing…" : "↻  Reprocess demo"}</button></div></header>
+    <header className="topbar case-topbar"><div><div className="breadcrumb"><Link href="/">Cases</Link><span>/</span>{data.name}</div><h1>{data.name}</h1><p className="lede">{data.property_address || "Property address pending"} <span className="separator">•</span> {data.documents.length} source documents</p>{uploadMessage && <p className="upload-status">{uploadMessage}</p>}</div><div className="header-actions"><span className={`case-status ${data.status}`}>{data.status === "review" ? "Review required" : data.status}</span><label className="secondary-button upload-button">{uploadBusy ? "OCR processing…" : "Upload scan"}<input type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.xlsx,.xlsm,.csv" onChange={upload} disabled={uploadBusy} /></label><button className="secondary-button" onClick={seed} disabled={busy}>{busy ? "Reprocessing…" : "↻  Reprocess demo"}</button></div></header>
     <section className="case-stat-strip"><Stat label="Fields extracted" value={String(fields.length)} sub={`${data.verified_field_count} high-confidence`} /><Stat label="Overall confidence" value={`${Math.round(data.overall_confidence * 100)}%`} sub="Composite score" /><Stat label="Reconciliations" value={String(data.reconciliations.length)} sub={`${data.reconciliations.filter((x) => x.status === "RECONCILED").length} passed`} /><Stat label="Exceptions" value={String(data.exception_count)} sub={`${openReviews.length} in review queue`} danger={data.exception_count > 0} /></section>
     <section className="workspace-grid">
       <div className="workspace-main">
@@ -53,9 +76,12 @@ export function CaseWorkspace({ caseId }: { caseId: string }) {
 
 function EvidenceViewer({ selected }: { selected: { field: Field; document: Document } }) {
   const evidence = selected.field.evidence[0];
+  const [imageFailed, setImageFailed] = useState(false);
+  const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
   if (!evidence) return <div className="evidence-empty"><div className="crosshair">?</div><h3>Unable to verify source span</h3><p>The field was typed successfully, but no exact source region matched. This is deliberately visible instead of being silently asserted.</p><span className="review-chip">Review recommended</span></div>;
   const pageUrl = `${API_URL}/api/documents/${evidence.document_id}/pages/${evidence.page}`;
-  return <div className="evidence-content"><div className="source-toolbar"><span>{selected.document.filename}</span><span>PAGE {evidence.page}</span></div><div className="source-canvas"><img src={pageUrl} alt={`Page ${evidence.page} from ${selected.document.filename}`} onError={(event) => { event.currentTarget.style.display = "none"; const fallback = event.currentTarget.nextElementSibling as HTMLElement | null; if (fallback) fallback.style.display = "block"; }} /><div className="source-fallback"><span className="scan-line" /><strong>{evidence.text}</strong><span className="highlight-caption">Matched evidence</span></div></div><div className="evidence-detail"><div><span className="detail-label">SOURCE</span><strong>{selected.document.filename}</strong></div><div><span className="detail-label">PAGE / SECTION</span><strong>{evidence.page} {evidence.section ? `· ${evidence.section}` : ""}</strong></div><div><span className="detail-label">METHOD</span><strong>{selected.field.method}</strong></div></div><div className="validation-trail"><div className="trail-title">Validation trail</div><div><span>✓</span> Typed schema accepted</div><div><span>✓</span> Source span linked</div><div><span>{selected.field.validation_status === "FAIL" ? "!" : "✓"}</span> {selected.field.validation_status === "NOT_CHECKED" ? "No arithmetic rule applies" : selected.field.validation_status}</div></div></div>;
+  const bbox = evidence.bbox && evidence.bbox.length === 4 && imageSize.width > 0 ? evidence.bbox : null;
+  return <div className="evidence-content"><div className="source-toolbar"><span>{selected.document.filename}</span><span>PAGE {evidence.page}</span></div><div className="source-canvas">{imageFailed ? <div className="source-fallback"><span className="scan-line" /><strong>{evidence.text}</strong><span className="highlight-caption">Matched evidence</span></div> : <div className="source-image-wrap"><img src={pageUrl} alt={`Page ${evidence.page} from ${selected.document.filename}`} onLoad={(event) => setImageSize({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })} onError={() => setImageFailed(true)} />{bbox && <span className="evidence-highlight" style={{ left: `${bbox[0] / imageSize.width * 100}%`, top: `${bbox[1] / imageSize.height * 100}%`, width: `${(bbox[2] - bbox[0]) / imageSize.width * 100}%`, height: `${(bbox[3] - bbox[1]) / imageSize.height * 100}%` }} />}</div>}</div><div className="evidence-detail"><div><span className="detail-label">SOURCE</span><strong>{selected.document.filename}</strong></div><div><span className="detail-label">PAGE / SECTION</span><strong>{evidence.page} {evidence.section ? `· ${evidence.section}` : ""}</strong></div><div><span className="detail-label">METHOD</span><strong>{selected.field.method}</strong></div></div><div className="validation-trail"><div className="trail-title">Validation trail</div><div><span>✓</span> Typed schema accepted</div><div><span>✓</span> Source span linked</div><div><span>{selected.field.validation_status === "FAIL" ? "!" : "✓"}</span> {selected.field.validation_status === "NOT_CHECKED" ? "No arithmetic rule applies" : selected.field.validation_status}</div></div></div>;
 }
 
 function Stat({ label, value, sub, danger = false }: { label: string; value: string; sub: string; danger?: boolean }) { return <div className="case-stat"><span>{label}</span><strong className={danger ? "danger-text" : ""}>{value}</strong><small>{sub}</small></div>; }

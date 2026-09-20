@@ -26,6 +26,7 @@ services:
     environment:
       APP_ENV: docker
       DATABASE_URL: postgresql+psycopg://veritydocs:veritydocs@postgres:5432/veritydocs
+      STORAGE_BACKEND: local
       STORAGE_ROOT: /app/storage
       REDIS_URL: redis://redis:6379/0
       EXTRACTION_PROVIDER: demo
@@ -46,6 +47,7 @@ services:
     environment:
       APP_ENV: docker
       DATABASE_URL: postgresql+psycopg://veritydocs:veritydocs@postgres:5432/veritydocs
+      STORAGE_BACKEND: local
       STORAGE_ROOT: /app/storage
       REDIS_URL: redis://redis:6379/0
       EXTRACTION_PROVIDER: demo

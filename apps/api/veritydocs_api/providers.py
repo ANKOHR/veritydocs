@@ -92,6 +92,16 @@ def _date(value: str | None) -> date | None:
     return None
 
 
+def _label_text(text: str, label: str, stop_labels: tuple[str, ...]) -> str | None:
+    stops = "|".join(re.escape(item) for item in stop_labels)
+    match = re.search(
+        rf"{re.escape(label)}\s*:?\s*(.+?)(?=\s+(?:{stops})\s*:|\n|$)",
+        text,
+        re.IGNORECASE,
+    )
+    return match.group(1).strip() if match else None
+
+
 class DemoExtractionProvider:
     """Credential-free provider for reproducible fixtures and local product demonstrations."""
 
@@ -186,13 +196,21 @@ class DemoExtractionProvider:
                 annual_property_tax=_money(text, "Annual property tax"),
             )
         elif document_type == "invoice":
+            invoice_labels = (
+                "Supplier",
+                "Invoice number",
+                "Issue date",
+                "Currency",
+                "Net",
+                "VAT",
+                "Tax",
+                "Gross",
+                "Total",
+            )
             model = InvoiceExtraction(
-                supplier_name=(
-                    re.search(r"Supplier:\s*([^\n]+)", text, re.IGNORECASE) or [None, None]
-                )[1],
-                invoice_number=(
-                    re.search(r"Invoice number:\s*([^\n]+)", text, re.IGNORECASE) or [None, None]
-                )[1],
+                supplier_name=_label_text(text, "Supplier", invoice_labels),
+                invoice_number=_label_text(text, "Invoice number", invoice_labels),
+                issue_date=_date(_label_text(text, "Issue date", invoice_labels)),
                 currency="GBP" if "£" in text or "gbp" in text.lower() else None,
                 net=_money(text, "Net"),
                 tax=_money(text, "VAT") or _money(text, "Tax"),

@@ -8,7 +8,7 @@ from typing import Any
 import pymupdf as fitz
 from openpyxl import load_workbook
 
-from ..storage import LocalObjectStore
+from ..storage import ObjectStore
 from .types import NormalizedDocument, NormalizedPage, TableBlock, TextBlock
 
 
@@ -17,21 +17,28 @@ def _clean(value: Any) -> str:
 
 
 def _pdf_page(
-    page: fitz.Page, page_number: int, store: LocalObjectStore, key_prefix: str
+    page: fitz.Page, page_number: int, store: ObjectStore, key_prefix: str
 ) -> NormalizedPage:
     pixmap = page.get_pixmap(matrix=fitz.Matrix(1.4, 1.4), alpha=False)
     image_key = f"{key_prefix}/rendered/page-{page_number:03d}.png"
     store.put_bytes(image_key, pixmap.tobytes("png"))
+    scale_x = pixmap.width / page.rect.width if page.rect.width else 1.0
+    scale_y = pixmap.height / page.rect.height if page.rect.height else 1.0
     blocks: list[TextBlock] = []
     for block in page.get_text("blocks"):
         x0, y0, x1, y1, text = block[:5]
         text = str(text).strip()
         if text:
-            blocks.append(TextBlock(text=text, bbox=[x0, y0, x1, y1]))
+            blocks.append(
+                TextBlock(
+                    text=text,
+                    bbox=[x0 * scale_x, y0 * scale_y, x1 * scale_x, y1 * scale_y],
+                )
+            )
     return NormalizedPage(
         page_number=page_number,
-        width=page.rect.width,
-        height=page.rect.height,
+        width=pixmap.width,
+        height=pixmap.height,
         blocks=blocks,
         image_key=image_key,
         ocr_used=False,
@@ -40,9 +47,13 @@ def _pdf_page(
 
 
 def normalize_pdf(
-    document_id: str, filename: str, mime_type: str, data: bytes, store: LocalObjectStore
+    document_id: str, filename: str, mime_type: str, data: bytes, store: ObjectStore
 ) -> NormalizedDocument:
     pdf = fitz.open(stream=data, filetype="pdf")
+    if pdf.is_encrypted and not pdf.authenticate(""):
+        raise ValueError("Encrypted PDFs are not supported without an explicit decryption boundary")
+    if pdf.page_count == 0:
+        raise ValueError("The PDF contains no pages")
     prefix = f"documents/{document_id}"
     pages = [_pdf_page(page, index + 1, store, prefix) for index, page in enumerate(pdf)]
     return NormalizedDocument(document_id, filename, mime_type, pages, {"format": "pdf"})
@@ -115,7 +126,7 @@ def normalize_csv(
 
 
 def normalize_image(
-    document_id: str, filename: str, mime_type: str, data: bytes, store: LocalObjectStore
+    document_id: str, filename: str, mime_type: str, data: bytes, store: ObjectStore
 ) -> NormalizedDocument:
     from PIL import Image
 
@@ -129,7 +140,7 @@ def normalize_image(
 
 
 def normalize_document(
-    document_id: str, filename: str, mime_type: str, data: bytes, store: LocalObjectStore
+    document_id: str, filename: str, mime_type: str, data: bytes, store: ObjectStore
 ) -> NormalizedDocument:
     extension = Path(filename).suffix.lower()
     if mime_type == "application/pdf" or extension == ".pdf":

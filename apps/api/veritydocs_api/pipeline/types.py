@@ -34,10 +34,16 @@ class NormalizedPage:
 
     @property
     def text(self) -> str:
-        chunks = [block.text for block in self.blocks if block.text]
+        if any(block.kind == "ocr_token" for block in self.blocks):
+            chunks = [block.text for block in self.blocks if block.text]
+            text = " ".join(chunks)
+        else:
+            text = "\n".join(block.text for block in self.blocks if block.text)
         for table in self.tables:
-            chunks.extend(" | ".join(str(cell) for cell in row) for row in table.rows)
-        return "\n".join(chunks)
+            text += ("\n" if text else "") + "\n".join(
+                " | ".join(str(cell) for cell in row) for row in table.rows
+            )
+        return text
 
 
 @dataclass

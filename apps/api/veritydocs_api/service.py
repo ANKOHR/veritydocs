@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 from dataclasses import asdict
 from datetime import UTC, datetime
@@ -44,7 +45,7 @@ from .schemas import (
     ReviewView,
     ValidationView,
 )
-from .storage import LocalObjectStore, sha256_bytes
+from .storage import LocalObjectStore, ObjectStore, S3ObjectStore, sha256_bytes
 from .validation import ValidationOutcome, validate_document
 
 
@@ -62,8 +63,20 @@ def jsonable(value: Any) -> Any:
     return value
 
 
-def object_store(settings: Settings | None = None) -> LocalObjectStore:
+logger = logging.getLogger(__name__)
+
+
+def object_store(settings: Settings | None = None) -> ObjectStore:
     selected = settings or get_settings()
+    if selected.storage_backend.lower() == "s3":
+        return S3ObjectStore(
+            endpoint_url=selected.s3_endpoint_url,
+            bucket=selected.s3_bucket,
+            access_key_id=selected.s3_access_key_id,
+            secret_access_key=selected.s3_secret_access_key,
+            region=selected.s3_region,
+            addressing_style=selected.s3_addressing_style,
+        )
     return LocalObjectStore(selected.storage_root)
 
 
@@ -121,7 +134,7 @@ def _delete_document_fields(db: Session, document_id: str) -> None:
 
 def _write_artifact(
     db: Session,
-    store: LocalObjectStore,
+    store: ObjectStore,
     document_id: str,
     kind: str,
     payload: Any,
@@ -175,7 +188,7 @@ def _field_validation_status(field_name: str, outcomes: list[ValidationOutcome])
     return "PASS"
 
 
-def _model_from_artifact(store: LocalObjectStore, document: DocumentModel) -> Any | None:
+def _model_from_artifact(store: ObjectStore, document: DocumentModel) -> Any | None:
     schema = EXTRACTION_SCHEMAS.get(document.document_type)
     key = f"documents/{document.id}/extraction.json"
     if schema is None or not store.exists(key):
@@ -227,7 +240,7 @@ def _record_review(
     )
 
 
-def rebuild_case_derived(db: Session, case_id: str, store: LocalObjectStore) -> None:
+def rebuild_case_derived(db: Session, case_id: str, store: ObjectStore) -> None:
     documents = list(db.scalars(select(DocumentModel).where(DocumentModel.case_id == case_id)))
     complete_documents = [document for document in documents if document.status == "complete"]
     db.execute(delete(ValidationResultModel).where(ValidationResultModel.case_id == case_id))
@@ -354,7 +367,7 @@ def process_document(
     db: Session,
     document_id: str,
     settings: Settings | None = None,
-    store: LocalObjectStore | None = None,
+    store: ObjectStore | None = None,
 ) -> ProcessingRunModel:
     settings = settings or get_settings()
     store = store or object_store(settings)
@@ -378,7 +391,7 @@ def process_document(
     document.status = "processing"
     case.status = "processing"
     db.flush()
-    timings: dict[str, float] = {}
+    timings: dict[str, Any] = {}
     started = time.perf_counter()
 
     try:
@@ -389,6 +402,7 @@ def process_document(
         )
         timings["normalize_ms"] = round((time.perf_counter() - stage_started) * 1000, 2)
         run.current_stage = "ocr"
+        stage_started = time.perf_counter()
         ocr_engine = None
         if settings.ocr_engine.lower() == "tesseract":
             try:
@@ -405,6 +419,9 @@ def process_document(
                     except (OCRUnavailable, OSError, RuntimeError) as exc:
                         page.blocks.append(TextBlock("OCR unavailable: " + str(exc)))
         timings["ocr_ms"] = round((time.perf_counter() - stage_started) * 1000, 2)
+        timings["ocr_engine"] = ocr_engine.name if ocr_engine else "unavailable"
+        timings["ocr_version"] = getattr(ocr_engine, "version", None)
+        timings["storage_backend"] = settings.storage_backend
         _write_artifact(db, store, document.id, "normalized", asdict(normalized))
 
         run.current_stage = "classification"
@@ -504,6 +521,14 @@ def process_document(
         )
         db.commit()
         db.refresh(run)
+        logger.info(
+            "document_processed document_id=%s type=%s provider=%s ocr=%s ocr_version=%s",
+            document.id,
+            document.document_type,
+            provider.name,
+            timings["ocr_engine"],
+            timings["ocr_version"],
+        )
         return run
     except Exception as exc:
         db.rollback()
