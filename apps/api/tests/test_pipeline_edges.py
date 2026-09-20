@@ -144,6 +144,28 @@ def test_demo_provider_extracts_invoice_from_spaced_ocr_text():
     assert result.model.invoice_number == "INV-0042"
 
 
+def test_numeric_evidence_needles_prioritize_the_value():
+    from veritydocs_api.pipeline.types import NormalizedDocument
+    from veritydocs_api.service import _find_evidence
+
+    document = NormalizedDocument(
+        "invoice",
+        "scan.pdf",
+        "application/pdf",
+        [
+            NormalizedPage(
+                1,
+                blocks=[
+                    TextBlock("Gross:", bbox=[10, 10, 30, 20]),
+                    TextBlock("9,600.00", bbox=[40, 10, 100, 20]),
+                ],
+            )
+        ],
+    )
+    evidence = _find_evidence(document, "gross", Decimal("9600"))
+    assert evidence and evidence["text"] == "9,600.00"
+
+
 @pytest.mark.parametrize(
     ("net", "tax", "gross", "expected"),
     [

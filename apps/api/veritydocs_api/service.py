@@ -88,21 +88,22 @@ def _provider(settings: Settings) -> ExtractionProvider:
 
 def _evidence_needles(field_name: str, value: Any) -> list[str]:
     label = field_name.replace("_", " ")
-    needles = [label]
+    needles: list[str] = []
     if value is None:
-        return needles
+        return [label]
     if isinstance(value, list):
         for item in value[:3]:
             if isinstance(item, dict):
                 needles.extend(str(item_value) for item_value in item.values() if item_value)
-        return needles
-    text = str(value)
-    needles.append(text)
-    try:
-        number = Decimal(text.replace(",", ""))
-        needles.extend([f"{number:,.2f}", f"{number:,.0f}", str(number)])
-    except InvalidOperation:
-        pass
+    else:
+        text = str(value)
+        needles.append(text)
+        try:
+            number = Decimal(text.replace(",", ""))
+            needles.extend([f"{number:,.2f}", f"{number:,.0f}", str(number)])
+        except InvalidOperation:
+            pass
+    needles.append(label)
     return list(dict.fromkeys(needle for needle in needles if needle))
 
 

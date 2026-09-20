@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import mimetypes
+import logging
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -39,6 +40,10 @@ from .service import case_view, object_store, process_document
 from .storage import sha256_bytes
 
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
 class CreateCaseRequest(BaseModel):
     name: str = Field(min_length=1, max_length=240)
     property_address: str | None = None
@@ -65,6 +70,14 @@ class UploadResponse(BaseModel):
 async def lifespan(_: FastAPI):
     init_db()
     object_store()
+    if get_settings().ocr_engine.lower() == "tesseract":
+        from .pipeline.ocr import OCRUnavailable, TesseractOCREngine
+
+        try:
+            engine = TesseractOCREngine()
+            logger.info("api_startup ocr_engine=%s version=%s", engine.name, engine.version)
+        except OCRUnavailable as exc:
+            logger.warning("api_startup ocr_engine=unavailable reason=%s", exc)
     yield
 
 
