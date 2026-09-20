@@ -3,8 +3,14 @@
 Evidence-backed document intelligence for turning messy PDFs, scans and spreadsheets into
 structured, validated and reviewable records.
 
-> Local build status: the deterministic showcase path is verified. No live provider key, real
-> customer document, production deployment or real-world accuracy claim is included.
+> External proof status (2026-09-20): a public Vercel dashboard and Railway API are live. A
+> synthetic image-only invoice was uploaded to the API, persisted in Railway's S3-compatible
+> bucket, processed by Dockerized Tesseract 5.5.0, extracted with the credential-free
+> deterministic provider, validated in Python and exposed with page/bounding-box evidence. A
+> deliberately inconsistent invoice produced `FIN-001: FAIL` and an open review. This proof
+> uses the synchronous `run_pipeline=true` path: Railway's free-plan resource limit prevented
+> provisioning Postgres, Redis and a separate worker, so those services are not claimed here.
+> No live provider key, real customer document or real-world accuracy claim is included.
 
 VerityDocs is intentionally not a document chatbot. Its central object is a document pipeline:
 
@@ -41,7 +47,7 @@ exceptions and source evidence for every important field.
   surfaces a claimed amount above the agreement value as a conflict.
 - Next.js evidence-first case workspace with source-region highlighting and a Docker Compose
   topology for API, worker, PostgreSQL and Redis.
-- 48 targeted backend tests, a 100-case synthetic evaluation runner, Alembic initial migration and honest
+- 49 targeted backend tests, a 100-case synthetic evaluation runner, Alembic initial migration and honest
   evidence documentation.
 
 ## Current implementation boundary
@@ -55,6 +61,9 @@ exceptions and source evidence for every important field.
   `EXTRACTION_PROVIDER=openai` and a separately configured key are present.
 - `S3ObjectStore` is implemented for Railway's S3-compatible bucket; local development defaults to
   `LocalObjectStore`.
+- The deployed proof uses the Railway API's Docker image and S3-compatible bucket. The public
+  dashboard is deployed to `https://veritydocs-web.vercel.app` and the API health endpoint is
+  `https://api-production-eb9c2.up.railway.app/health`.
 - Every persisted field carries confidence, method, validation state and evidence references.
 - Arithmetic and reconciliation rules are deterministic Python, never model-generated math.
 

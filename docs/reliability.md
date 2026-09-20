@@ -13,6 +13,7 @@ The pipeline is designed to fail visibly:
   implementation without mutating the source.
 
 The current implementation does not yet claim a production dead-letter dashboard, distributed
-tracing or malware scanning. Cloud object-storage support is implemented through the
-S3-compatible adapter, but deployment evidence remains separate from local verification until the
-Railway API and worker complete a real upload.
+tracing or malware scanning. The Railway API proof completed real uploads through the
+S3-compatible bucket and exercised Tesseract in the Docker image. Because Railway's free-plan
+resource limit blocked Postgres, Redis and a separate worker, that proof used the synchronous API
+path; durable queued processing is not claimed until those services are provisioned and verified.
