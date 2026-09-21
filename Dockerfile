@@ -12,6 +12,7 @@ WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY apps ./apps
 COPY packages ./packages
+COPY fixtures ./fixtures
 COPY migrations ./migrations
 COPY alembic.ini ./
 RUN pip install --upgrade pip && pip install .
