@@ -26,6 +26,62 @@ immutable upload
   -> human review or VERIFIED output
 ```
 
+## Local invoice-checker demo
+
+This repository includes a small FastAPI page at `/demo`. It accepts an invoice PDF or image and
+uses the existing VerityDocs normalization, Dockerized-Tesseract-compatible OCR adapter,
+deterministic demo extraction provider, field evidence, and financial validation pipeline. The
+page presents the actual `CaseView` returned by the API in a compact invoice-focused layout.
+
+### Prerequisites
+
+- Windows PowerShell, Python 3.13, and Git.
+- Tesseract OCR 5.x on `PATH` for the bundled image-only invoice samples. The repository
+  Dockerfile installs `tesseract-ocr` and `tesseract-ocr-eng` for container runs.
+- Node.js and pnpm are only needed for the existing Next.js case workspace, not for this FastAPI
+  demo page.
+
+### Install and run the FastAPI demo
+
+From the repository root:
+
+```powershell
+py -3.13 -m venv .venv
+.venv\Scripts\python.exe -m pip install -e ".[dev]"
+.venv\Scripts\python.exe -m uvicorn veritydocs_api.main:app --app-dir apps/api --host 127.0.0.1 --port 8000
+```
+
+Open [http://127.0.0.1:8000/demo](http://127.0.0.1:8000/demo). The page has a local-file upload
+path and three clearly labelled synthetic samples:
+
+- `Clean sample` uses the existing `£8,000.00` net and `£1,600.00` VAT values with a `£9,600.00`
+  gross total and should pass `FIN-001`.
+- `Totals mismatch sample` uses the same inputs with a stated `£9,900.00` gross total and should
+  expose the existing `FIN-001` failure and a `£300.00` discrepancy.
+- `Missing field sample` omits VAT from the synthetic document. The existing validator should
+  return `FIN-001` as `UNABLE_TO_VERIFY` because the arithmetic inputs are incomplete.
+
+The demo creates a fresh local case for each run and calls the existing API upload endpoint with
+`run_pipeline=true`. It does not call an external service or modify the remote repository.
+
+### Tests
+
+Run the backend suite, including the focused demo integration checks, with:
+
+```powershell
+.venv\Scripts\python.exe -m pytest -q
+```
+
+The fixture generator can recreate the three invoice PDFs with:
+
+```powershell
+.venv\Scripts\python.exe scripts\generate_invoice_fixtures.py
+```
+
+If Tesseract is not available, the existing pipeline fails closed for image-only input and the
+sample results cannot be treated as OCR verification. Native-text PDFs and the rest of the
+backend tests remain separate from that system dependency.
+
 The first showcase case is **Acme Property Acquisition**. It combines a rent roll, operating
 statement, loan summary and property-tax record. The case view exposes reconciled financial facts,
 exceptions and source evidence for every important field.

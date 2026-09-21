@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 
 from .config import get_settings
 from .database import get_db, init_db
+from .demo import router as demo_router
 from .models import (
     ArtifactModel,
     AuditEventModel,
@@ -93,6 +94,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(demo_router)
 
 
 def _tenant(header: str | None) -> str:
