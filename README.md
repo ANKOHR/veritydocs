@@ -12,6 +12,13 @@ structured, validated and reviewable records.
 > provisioning Postgres, Redis and a separate worker, so those services are not claimed here.
 > No live provider key, real customer document or real-world accuracy claim is included.
 
+## 60-second reviewer path
+
+1. Open the [public dashboard](https://veritydocs-web.vercel.app) and inspect the evidence-first case workspace.
+2. Read [`docs/evidence.md`](docs/evidence.md) for the exact external-proof boundary and verified observations.
+3. Review [`docs/architecture.md`](docs/architecture.md) for the document pipeline, provenance model and review flow.
+4. Run the deterministic local demo or backend tests below; the public proof deliberately separates synthetic/local evidence from deployed observations.
+
 VerityDocs is intentionally not a document chatbot. Its central object is a document pipeline:
 
 ```text
@@ -127,17 +134,17 @@ No live model, customer result or production accuracy claim is made by the local
 
 ## Run locally
 
+From the repository root:
+
 ```powershell
-cd C:\Users\henry\veritydocs
 py -3.13 -m venv .venv
 .venv\Scripts\python.exe -m pip install -e ".[dev]"
 .venv\Scripts\python.exe -m uvicorn veritydocs_api.main:app --app-dir apps/api --reload
 ```
 
-In another terminal:
+In another terminal, also from the repository root:
 
 ```powershell
-cd C:\Users\henry\veritydocs
 pnpm install
 pnpm --filter veritydocs-web dev
 ```
